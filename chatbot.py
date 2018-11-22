@@ -47,7 +47,7 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 		d = { i['key'] : i['value'] for i in e.tags }
 
 		# Insert message into database (logs)
-		self.cursor.executemany("INSERT INTO log VALUES (?, ?, ?)", (d['display-name'], e.arguments[0], d['tmi-sent-ts'],))
+		self.cursor.execute("INSERT INTO log VALUES (?, ?, ?)", (d['display-name'], e.arguments[0], d['tmi-sent-ts'],))
 		self.conn.commit()
 
 		# If a chat message starts with an exclamation point, try to run it as a command
