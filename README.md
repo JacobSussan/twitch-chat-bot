@@ -32,6 +32,7 @@
 - !followage: display how long a user has been following the stream
 - let mods change game or title from chat
 - give users a rank
+- check your own or another viewers rank
 - points ranks (!top - show users with the most points)
 - commands that just respond text from database (ex: !ping says: "pong")
 - poll system
