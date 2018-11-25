@@ -85,7 +85,8 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 		
 		# Poll the API to get current game.
 		elif cmd == "game":
-			try:
+			# Set the game
+			if len(e.arguments[0].split(' ')) == 2:
 				new_game = e.arguments[0].split(' ', 1)[1][0:]
 				if self.isMod(e.tags[2]['value'].lower()):
 					url = 'https://api.twitch.tv/kraken/channels/' + self.channel_id
@@ -97,7 +98,8 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 					r = requests.put(url=url, headers=headers, params=data)
 
 					c.privmsg(self.irc_channel, "The game has been updated to: " + new_game)
-			except IndexError:
+			# Display the current game
+			else:
 				url = 'https://api.twitch.tv/kraken/channels/' + self.channel_id
 				headers = {'Client-ID': self.client_id, 'Accept': 'application/vnd.twitchtv.v5+json'}
 				r = requests.get(url, headers=headers).json()
@@ -105,7 +107,8 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 
 		# Poll the API the get the current status(title) of the stream
 		elif cmd == "title":
-			try:
+			# Set the title
+			if len(e.arguments[0].split(' ')) == 2:
 				new_title = e.arguments[0].split(' ', 1)[1][0:]
 				if self.isMod(e.tags[2]['value'].lower()):
 					url = 'https://api.twitch.tv/kraken/channels/' + self.channel_id
@@ -117,7 +120,8 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 					r = requests.put(url=url, headers=headers, params=data)
 
 					c.privmsg(self.irc_channel, "The title has been updated to: " + new_title)
-			except IndexError:
+			# Display the current title
+			else:
 				url = 'https://api.twitch.tv/kraken/channels/' + self.channel_id
 				headers = {'Client-ID': self.client_id, 'Accept': 'application/vnd.twitchtv.v5+json'}
 				r = requests.get(url, headers=headers).json()
@@ -133,9 +137,11 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 		
 		# Check the database and tell the viewer how many points they have
 		elif cmd == "points":
-			try:
+			# Checking another users points
+			if len(e.arguments[0].split(' ')) == 2:
 				name = e.arguments[0].split(' ')[1][0:]
-			except IndexError:
+			# Checking your own points
+			else:
 				name = e.tags[2]['value']
 
 			self.cursor.execute("SELECT points FROM users WHERE name=?", (name.lower(),))
@@ -147,14 +153,18 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 			url = 'https://api.twitch.tv/kraken/streams/' + self.channel_id
 			headers = {'Client-ID': self.client_id, 'Accept': 'application/vnd.twitchtv.v5+json'}
 			r = requests.get(url, headers=headers).json()
-			message = "Stream has been live for " + str(time_since('%Y-%m-%dT%H:%M:%SZ', r['stream']['created_at']))
+			try:
+				message = "Stream has been live for " + str(time_since('%Y-%m-%dT%H:%M:%SZ', r['stream']['created_at']))
+			except:
+				message = "Stream is not live."
 			c.privmsg(self.irc_channel, message)
 
 		# Display how long a user has been following the stream for
 		elif cmd == "followage":
-			try:
+			# Checking another users followage
+			if len(e.arguments[0].split(' ')) == 2:
 				name = e.arguments[0].split(' ')[1][0:]
-			except IndexError:
+			else:
 				name = e.tags[2]['value']
 
 			# Get user_id from displayname
@@ -169,10 +179,8 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 			r = requests.get(url, headers=headers).json()
 
 			try:
-				message = name + " followed this channel " + \
-					str(time_since('%Y-%m-%dT%H:%M:%SZ', r['created_at']).days) + " days ago."
-
-			except KeyError:
+				message = name + " followed this channel " + str(time_since('%Y-%m-%dT%H:%M:%SZ', r['created_at']).days) + " days ago."
+			except:
 				message = name + " is not following this channel."
 
 			c.privmsg(self.irc_channel, message)
