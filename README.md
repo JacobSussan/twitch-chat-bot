@@ -34,14 +34,20 @@
 - give users a rank
 - points ranks (!top - show users with the most points)
 - commands that just respond text from database (ex: !ping says: "pong")
+- poll system
+	- !poll option1, option2, etc
+	- !vote option
+	- !results
+- betting system
+	- !createbet multiplier option1, option2, etc
+	- !bet amount option
+	- !endbet option
 
 ### On the roadmap
 
 - notices that get put in chat every x minutes.
 - counters (ie: this command has been used x times)
 - songrequests (youtube and spoitify?)
-- betting system (who will win this game?)
-- poll system
 
 ### To think about
 - should time be time watched when live or time spent in chat (off and online)

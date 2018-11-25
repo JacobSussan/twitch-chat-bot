@@ -179,6 +179,7 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 
 			c.privmsg(self.irc_channel, message)
 
+		# View or change the rank of a user
 		elif cmd == "rank":
 			self.cursor.execute("SELECT rank FROM users WHERE name=?", (e.tags[2]['value'].lower(),))
 			if self.cursor.fetchone()[0] == "mod":
@@ -188,11 +189,90 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 				self.conn.commit()
 				c.privmsg(self.irc_channel, name + " has been given the rank " + rank)
 
+		# Show the top 5 users in points
 		elif cmd == "top":
 			self.cursor.execute("SELECT name, points FROM users WHERE rank is not 'blacklisted' AND rank is not 'bot' ORDER BY points DESC LIMIT 5")
 			top_list = self.cursor.fetchall()
 			message = "1: " + top_list[0][0] + ": " + str(top_list[0][1]) + ", 2: " + top_list[1][0] + ": " + str(top_list[1][1]) + ", 3: " + top_list[2][0] + ": " + str(top_list[2][1]) + ", 4: " + top_list[3][0] + ": " + str(top_list[3][1]) + ", 5: " + top_list[4][0] + ": " + str(top_list[4][1])
 			c.privmsg(self.irc_channel, message)
+
+		# Create a poll - !poll option1, option2, etc
+		elif cmd == "poll":
+			self.cursor.execute("SELECT rank FROM users WHERE name=?", (e.tags[2]['value'].lower(),))
+			if self.cursor.fetchone()[0] == "mod" and len(e.arguments[0].split(' ', 1)) == 2:
+				self.poll = [""]
+				self.poll_voted = []
+				self.results = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+				self.poll[0] = e.arguments[0].split(' ', 1)[1][0:]
+				c.privmsg(self.irc_channel, "Created poll with options: " + e.arguments[0].split(' ', 1)[1][0:])
+
+		# Vote on an option from the poll
+		elif cmd == "vote":
+			name = e.tags[2]['value']
+			if hasattr(self, 'poll') and len(e.arguments[0].split(' ', 2)) == 2 and not name.lower() in self.poll_voted and e.arguments[0].split(' ', 1)[1][0:] in self.poll[0].split(', '):
+				options = self.poll[0].split(', ')
+				self.poll_voted.append(name.lower())
+				self.results[options.index(e.arguments[0].split(' ', 1)[1][0:])] += 1
+
+		# Display the results of the poll
+		elif cmd == "results":
+			self.cursor.execute("SELECT rank FROM users WHERE name=?", (e.tags[2]['value'].lower(),))
+			if self.cursor.fetchone()[0] == "mod" and hasattr(self, 'poll'):
+				options = self.poll[0].split(', ')
+				message = "Results: "
+				for option in options:
+					message += option + ": " + str(self.results[options.index(option)]) + " "
+
+				c.privmsg(self.irc_channel, message)
+
+		# Create a bet - !createbet multiplier option1, option2, etc
+		elif cmd == "createbet":
+			self.cursor.execute("SELECT rank FROM users WHERE name=?", (e.tags[2]['value'].lower(),))
+			if self.cursor.fetchone()[0] == "mod" and len(e.arguments[0].split(' ', 2)) == 3:
+				self.bet = [""]
+				self.users_bet = []
+				self.bet_mp = int(e.arguments[0].split(' ', 2)[1][0:])
+				self.bet[0] = e.arguments[0].split(' ', 2)[2][0:]
+
+				c.privmsg(self.irc_channel, "Created bet with multiplier of: "
+				+ e.arguments[0].split(' ', 2)[1][0:]
+				+ " and options of "
+				+ e.arguments[0].split(' ', 2)[2][0:])
+
+				c.privmsg(self.irc_channel, "Bet with !bet amount option")
+
+		# Bet on an option - !bet amount option
+		elif cmd == "bet":
+			if hasattr(self, 'bet') and len(e.arguments[0].split(' ', 2)) == 3 and e.arguments[0].split(' ', 2)[2][0:] in self.bet[0].split(', '):
+				name = e.tags[2]['value']
+				options = self.bet[0].split(', ')
+				option = e.arguments[0].split(' ', 2)[2][0:]
+				bet_amount = e.arguments[0].split(' ', 2)[1][0:]
+				self.cursor.execute("SELECT points FROM users WHERE name=?", (name.lower(),))
+				points = self.cursor.fetchone()[0]
+
+				# Make sure the user has enough points to make this bet
+				if points >= int(bet_amount):
+					self.users_bet.append((name.lower(), bet_amount, option))
+					self.cursor.execute("UPDATE users SET points = ? WHERE name=?", (points - int(bet_amount), name.lower(),))
+					self.conn.commit()
+					c.privmsg(self.irc_channel, name + " has bet " + str(bet_amount) + " on option " + option)
+
+		# End the bet, and distribute users their points if any won - !endbet option
+		elif cmd == "endbet":
+			name = e.tags[2]['value']
+			self.cursor.execute("SELECT rank FROM users WHERE name=?", (name.lower(),))
+			if self.cursor.fetchone()[0] == "mod" and hasattr(self, 'bet'):
+				message = "Winners: "
+				for user in self.users_bet:
+					if user[2] == e.arguments[0].split(' ', 1)[1][0:]:
+						won_amount = int(user[1]) * int(self.bet_mp)
+						message += user[0] + ": " + str(won_amount) + ", "
+						self.cursor.execute("UPDATE users SET points = points + ? WHERE name=?", (won_amount, name.lower(),))
+
+				self.conn.commit()
+				c.privmsg(self.irc_channel, message)
+				self.users_bet = []
 
 	# Handles adding points and time-watched to the database for users in the chat
 	def tick(self):
