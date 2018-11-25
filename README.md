@@ -52,5 +52,3 @@
 
 ### To think about
 - should time be time watched when live or time spent in chat (off and online)
-
-FIX TRY EXCEPT THINGS
