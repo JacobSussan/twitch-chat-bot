@@ -62,8 +62,29 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 	def do_command(self, e, cmd):
 		c = self.connection
 
+		# Check the database for custom commands
+		self.cursor.execute("SELECT command, response FROM commands")
+		for command in self.cursor.fetchall():
+			if (command[0] == cmd):
+				c.privmsg(self.irc_channel, "@" + e.tags[2]['value'] + ", "+ command[1])
+	
+		# Add custom commands
+		if cmd == "addcommand":
+			new_cmd = e.arguments[0].split(' ', 2)[1][0:]
+			response = e.arguments[0].split(' ', 2)[2][0:]
+			self.cursor.execute("INSERT INTO commands VALUES (?, ?)", (new_cmd, response,))
+			self.conn.commit()
+			c.privmsg(self.irc_channel, "Command !" + new_cmd + " was added!")
+		
+		# Delete custom commands
+		elif cmd == "delcommand":
+			command_to_remove = e.arguments[0].split(' ', 1)[1][0:]
+			self.cursor.execute("DELETE FROM commands WHERE command=?", (command_to_remove,))
+			self.conn.commit()
+			c.privmsg(self.irc_channel, "Command !" + command_to_remove + " was removed!")
+		
 		# Poll the API to get current game.
-		if cmd == "game":
+		elif cmd == "game":
 			try:
 				new_game = e.arguments[0].split(' ', 1)[1][0:]
 				self.cursor.execute("SELECT rank FROM users WHERE name=?", (e.tags[2]['value'].lower(),))
@@ -166,6 +187,12 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 				self.cursor.execute("UPDATE users SET rank = ? WHERE name=?", (rank.lower(), name.lower(),))
 				self.conn.commit()
 				c.privmsg(self.irc_channel, name + " has been given the rank " + rank)
+
+		elif cmd == "top":
+			self.cursor.execute("SELECT name, points FROM users WHERE rank is not 'blacklisted' AND rank is not 'bot' ORDER BY points DESC LIMIT 5")
+			top_list = self.cursor.fetchall()
+			message = "1: " + top_list[0][0] + ": " + str(top_list[0][1]) + ", 2: " + top_list[1][0] + ": " + str(top_list[1][1]) + ", 3: " + top_list[2][0] + ": " + str(top_list[2][1]) + ", 4: " + top_list[3][0] + ": " + str(top_list[3][1]) + ", 5: " + top_list[4][0] + ": " + str(top_list[4][1])
+			c.privmsg(self.irc_channel, message)
 
 	# Handles adding points and time-watched to the database for users in the chat
 	def tick(self):
