@@ -28,6 +28,7 @@
 - !followage: display how long a user has been following the stream
 
 ### On the roadmap
+
 - commands that just respond text from database (ex: !ping says: "pong")
 - notices that get put in chat every x minutes.
 - counters (ie: this command has been used x times)
@@ -36,7 +37,6 @@
 - betting system (who will win this game?)
 - poll system
 - points ranks (!top - show users with the most points)
-- check someone elses points or followage
 - blacklist users
 
 ### To think about

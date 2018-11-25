@@ -84,8 +84,13 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 		
 		# Check the database and tell the viewer how many points they have
 		elif cmd == "points":
-			self.cursor.execute("SELECT points FROM users WHERE name=?", (e.tags[2]['value'].lower(),))
-			message = e.tags[2]['value'] + " has " + str(self.cursor.fetchone()[0]) + " points!"
+			try:
+				name = e.arguments[0].split(' ')[1][0:]
+			except IndexError:
+				name = e.tags[2]['value']
+
+			self.cursor.execute("SELECT points FROM users WHERE name=?", (name.lower(),))
+			message = name + " has " + str(self.cursor.fetchone()[0]) + " points!"
 			c.privmsg(self.irc_channel, message)
 
 		# Display how long the stream has been live before
@@ -98,16 +103,28 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 
 		# Display how long a user has been following the stream for
 		elif cmd == "followage":
-			url = 'https://api.twitch.tv/kraken/users/' + e.tags[11]['value'] + '/follows/channels/' + self.channel_id
+			try:
+				name = e.arguments[0].split(' ')[1][0:]
+			except IndexError:
+				name = e.tags[2]['value']
+
+			# Get user_id from displayname
+			url = 'https://api.twitch.tv/kraken/users?login=' + name
+			headers = {'Client-ID': self.client_id, 'Accept': 'application/vnd.twitchtv.v5+json'}
+			r = requests.get(url, headers=headers).json()
+
+			# Get followage data from their id
+			user_id = r['users'][0]['_id']
+			url = 'https://api.twitch.tv/kraken/users/' + user_id + '/follows/channels/' + self.channel_id
 			headers = {'Client-ID': self.client_id, 'Accept': 'application/vnd.twitchtv.v5+json'}
 			r = requests.get(url, headers=headers).json()
 
 			try:
-				message = e.tags[2]['value'] + " followed this channel " + \
+				message = name + " followed this channel " + \
 					str(time_since('%Y-%m-%dT%H:%M:%SZ', r['created_at']).days) + " days ago."
 
 			except KeyError:
-				message = e.tags[2]['value'] + " is not following this channel."
+				message = name + " is not following this channel."
 
 			c.privmsg(self.irc_channel, message)
 
@@ -116,7 +133,7 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 		# We need a new connection and cursor since they can only be used on the thread they were created on
 		self.tick_conn = sqlite3.connect('data.db')
 		self.tick_cursor = self.tick_conn.cursor()
-		
+
 		# Main points/time loop
 		while True:
 			# Get a list of "chatters" from twitch
