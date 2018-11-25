@@ -26,6 +26,8 @@
 - !points: display how many points a user has
 - !uptime: display how long the stream has been live
 - !followage: display how long a user has been following the stream
+- let mods change game or title from chat
+- give users a rank
 
 ### On the roadmap
 
@@ -33,11 +35,9 @@
 - notices that get put in chat every x minutes.
 - counters (ie: this command has been used x times)
 - songrequests (youtube and spoitify?)
-- let mods change game or title from chat
 - betting system (who will win this game?)
 - poll system
 - points ranks (!top - show users with the most points)
-- blacklist users
 
 ### To think about
 - should time be time watched when live or time spent in chat (off and online)

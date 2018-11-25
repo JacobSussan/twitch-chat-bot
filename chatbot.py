@@ -7,11 +7,13 @@ import datetime
 from datetime import timedelta
 from threading import Thread
 import time
+from requests.utils import quote
 
 class TwitchBot(irc.bot.SingleServerIRCBot):
-	def __init__(self, username, client_id, token, channel, conn):
+	def __init__(self, username, client_id, token, channel_oauth, channel, conn):
 		self.client_id = client_id
 		self.token = token
+		self.channel_oauth = channel_oauth
 		self.channel = channel
 		self.irc_channel = "#" + channel
 		self.conn = conn
@@ -62,17 +64,45 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 
 		# Poll the API to get current game.
 		if cmd == "game":
-			url = 'https://api.twitch.tv/kraken/channels/' + self.channel_id
-			headers = {'Client-ID': self.client_id, 'Accept': 'application/vnd.twitchtv.v5+json'}
-			r = requests.get(url, headers=headers).json()
-			c.privmsg(self.irc_channel, r['display_name'] + ' is currently playing ' + r['game'])
+			try:
+				new_game = e.arguments[0].split(' ', 1)[1][0:]
+				self.cursor.execute("SELECT rank FROM users WHERE name=?", (e.tags[2]['value'].lower(),))
+				if self.cursor.fetchone()[0] == "mod":
+					url = 'https://api.twitch.tv/kraken/channels/' + self.channel_id
+					headers = {'Client-ID': self.client_id,
+					'Accept': 'application/vnd.twitchtv.v5+json',
+					'Content-Type': 'application/json',
+					'Authorization': 'OAuth ' + self.channel_oauth}
+					data = 'channel[game]=' + quote(new_game, safe="")
+					r = requests.put(url=url, headers=headers, params=data)
+
+					c.privmsg(self.irc_channel, "The game has been updated to: " + new_game)
+			except IndexError:
+				url = 'https://api.twitch.tv/kraken/channels/' + self.channel_id
+				headers = {'Client-ID': self.client_id, 'Accept': 'application/vnd.twitchtv.v5+json'}
+				r = requests.get(url, headers=headers).json()
+				c.privmsg(self.irc_channel, r['display_name'] + ' is currently playing ' + r['game'])
 
 		# Poll the API the get the current status(title) of the stream
 		elif cmd == "title":
-			url = 'https://api.twitch.tv/kraken/channels/' + self.channel_id
-			headers = {'Client-ID': self.client_id, 'Accept': 'application/vnd.twitchtv.v5+json'}
-			r = requests.get(url, headers=headers).json()
-			c.privmsg(self.irc_channel, r['display_name'] + ' channel title is currently ' + r['status'])
+			try:
+				new_title = e.arguments[0].split(' ', 1)[1][0:]
+				self.cursor.execute("SELECT rank FROM users WHERE name=?", (e.tags[2]['value'].lower(),))
+				if self.cursor.fetchone()[0] == "mod":
+					url = 'https://api.twitch.tv/kraken/channels/' + self.channel_id
+					headers = {'Client-ID': self.client_id,
+					'Accept': 'application/vnd.twitchtv.v5+json',
+					'Content-Type': 'application/json',
+					'Authorization': 'OAuth ' + self.channel_oauth}
+					data = 'channel[status]=' + quote(new_title, safe="")
+					r = requests.put(url=url, headers=headers, params=data)
+
+					c.privmsg(self.irc_channel, "The title has been updated to: " + new_title)
+			except IndexError:
+				url = 'https://api.twitch.tv/kraken/channels/' + self.channel_id
+				headers = {'Client-ID': self.client_id, 'Accept': 'application/vnd.twitchtv.v5+json'}
+				r = requests.get(url, headers=headers).json()
+				c.privmsg(self.irc_channel, r['display_name'] + ', the current title is: ' + r['status'])
 
 		# Tell the viewers what they need to know about gambling
 		elif cmd == "gamble":
@@ -127,6 +157,15 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 				message = name + " is not following this channel."
 
 			c.privmsg(self.irc_channel, message)
+
+		elif cmd == "rank":
+			self.cursor.execute("SELECT rank FROM users WHERE name=?", (e.tags[2]['value'].lower(),))
+			if self.cursor.fetchone()[0] == "mod":
+				name = e.arguments[0].split(' ')[1][0:]
+				rank = e.arguments[0].split(' ')[2][0:]
+				self.cursor.execute("UPDATE users SET rank = ? WHERE name=?", (rank.lower(), name.lower(),))
+				self.conn.commit()
+				c.privmsg(self.irc_channel, name + " has been given the rank " + rank)
 
 	# Handles adding points and time-watched to the database for users in the chat
 	def tick(self):
@@ -201,7 +240,7 @@ def time_since(datetimeFormat, date):
 
 def main():
 	# Make sure settings are set
-	if config.SETTINGS['bot_name'] == "" or config.SETTINGS['client_id'] == "" or config.SETTINGS['oauth'] == "" or config.SETTINGS['channel_name'] == "":
+	if config.SETTINGS['bot_name'] == "" or config.SETTINGS['client_id'] == "" or config.SETTINGS['oauth'] == "" or config.SETTINGS['channel_name'] == "" or config.SETTINGS['channel_oauth'] == "":
 		print("You must edit config.py first")
 		sys.exit(1)
 
@@ -210,9 +249,10 @@ def main():
 	username = config.SETTINGS['bot_name']
 	client_id = config.SETTINGS['client_id']
 	token = config.SETTINGS['oauth']
+	channel_oauth = config.SETTINGS['channel_oauth']
 	channel = config.SETTINGS['channel_name'].lower()
 
-	bot = TwitchBot(username, client_id, token, channel, conn)
+	bot = TwitchBot(username, client_id, token, channel_oauth, channel, conn)
 	bot.start()
 
 if __name__ == "__main__":
