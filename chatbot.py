@@ -70,23 +70,25 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 	
 		# Add custom commands
 		if cmd == "addcommand":
-			new_cmd = e.arguments[0].split(' ', 2)[1][0:]
-			response = e.arguments[0].split(' ', 2)[2][0:]
-			self.cursor.execute("INSERT INTO commands VALUES (?, ?)", (new_cmd, response,))
-			self.conn.commit()
-			c.privmsg(self.irc_channel, "Command !" + new_cmd + " was added!")
+			if len(e.arguments[0].split(' ', 2)) == 3:
+				new_cmd = e.arguments[0].split(' ', 2)[1][0:]
+				response = e.arguments[0].split(' ', 2)[2][0:]
+				self.cursor.execute("INSERT INTO commands VALUES (?, ?)", (new_cmd, response,))
+				self.conn.commit()
+				c.privmsg(self.irc_channel, "Command !" + new_cmd + " was added!")
 		
 		# Delete custom commands
 		elif cmd == "delcommand":
-			command_to_remove = e.arguments[0].split(' ', 1)[1][0:]
-			self.cursor.execute("DELETE FROM commands WHERE command=?", (command_to_remove,))
-			self.conn.commit()
-			c.privmsg(self.irc_channel, "Command !" + command_to_remove + " was removed!")
+			if len(e.arguments[0].split(' ', 1)) == 2:
+				command_to_remove = e.arguments[0].split(' ', 1)[1][0:]
+				self.cursor.execute("DELETE FROM commands WHERE command=?", (command_to_remove,))
+				self.conn.commit()
+				c.privmsg(self.irc_channel, "Command !" + command_to_remove + " was removed!")
 		
 		# Poll the API to get current game.
 		elif cmd == "game":
 			# Set the game
-			if len(e.arguments[0].split(' ')) == 2:
+			if len(e.arguments[0].split(' ', 1)) == 2:
 				new_game = e.arguments[0].split(' ', 1)[1][0:]
 				if self.isMod(e.tags[2]['value'].lower()):
 					url = 'https://api.twitch.tv/kraken/channels/' + self.channel_id
@@ -108,7 +110,7 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 		# Poll the API the get the current status(title) of the stream
 		elif cmd == "title":
 			# Set the title
-			if len(e.arguments[0].split(' ')) == 2:
+			if len(e.arguments[0].split(' ', 1)) == 2:
 				new_title = e.arguments[0].split(' ', 1)[1][0:]
 				if self.isMod(e.tags[2]['value'].lower()):
 					url = 'https://api.twitch.tv/kraken/channels/' + self.channel_id
@@ -149,7 +151,7 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 			c.privmsg(self.irc_channel, message)
 
 		# Display how long the stream has been live before
-		elif cmd == "uptime":
+		elif cmd == "uptime" or cmd == "p":
 			url = 'https://api.twitch.tv/kraken/streams/' + self.channel_id
 			headers = {'Client-ID': self.client_id, 'Accept': 'application/vnd.twitchtv.v5+json'}
 			r = requests.get(url, headers=headers).json()
@@ -162,7 +164,7 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 		# Display how long a user has been following the stream for
 		elif cmd == "followage":
 			# Checking another users followage
-			if len(e.arguments[0].split(' ')) == 2:
+			if len(e.arguments[0].split(' '), 1) == 2:
 				name = e.arguments[0].split(' ')[1][0:]
 			else:
 				name = e.tags[2]['value']
@@ -243,7 +245,7 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 
 		# Create a bet - !createbet multiplier option1, option2, etc
 		elif cmd == "createbet":
-			if self.isMod(e.tags[2]['value'].lower()) and len(e.arguments[0].split(' ', 2)) == 3:
+			if self.isMod(e.tags[2]['value'].lower()) and len(e.arguments[0].split(' ', 2)) == 3 and str.isdigit(e.arguments[0].split(' ', 2)[1]):
 				self.bet = [""]
 				self.users_bet = []
 				self.bet_mp = int(e.arguments[0].split(' ', 2)[1][0:])
@@ -258,7 +260,7 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 
 		# Bet on an option - !bet amount option
 		elif cmd == "bet":
-			if hasattr(self, 'bet') and len(e.arguments[0].split(' ', 2)) == 3 and e.arguments[0].split(' ', 2)[2][0:] in self.bet[0].split(', '):
+			if hasattr(self, 'bet') and len(e.arguments[0].split(' ', 2)) == 3 and e.arguments[0].split(' ', 2)[2][0:] in self.bet[0].split(', ') and str.isdigit(e.arguments[0].split(' ', 2)[1]):
 				name = e.tags[2]['value']
 				options = self.bet[0].split(', ')
 				option = e.arguments[0].split(' ', 2)[2][0:]
