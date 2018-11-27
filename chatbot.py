@@ -138,7 +138,7 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 			c.privmsg(self.irc_channel, message)
 		
 		# Check the database and tell the viewer how many points they have
-		elif cmd == "points":
+		elif cmd == "points" or cmd == "p":
 			# Checking another users points
 			if len(e.arguments[0].split(' ')) == 2:
 				name = e.arguments[0].split(' ')[1][0:]
@@ -151,7 +151,7 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 			c.privmsg(self.irc_channel, message)
 
 		# Display how long the stream has been live before
-		elif cmd == "uptime" or cmd == "p":
+		elif cmd == "uptime":
 			url = 'https://api.twitch.tv/kraken/streams/' + self.channel_id
 			headers = {'Client-ID': self.client_id, 'Accept': 'application/vnd.twitchtv.v5+json'}
 			r = requests.get(url, headers=headers).json()
