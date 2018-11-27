@@ -164,7 +164,7 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 		# Display how long a user has been following the stream for
 		elif cmd == "followage":
 			# Checking another users followage
-			if len(e.arguments[0].split(' '), 1) == 2:
+			if len(e.arguments[0].split(' ', 1)) == 2:
 				name = e.arguments[0].split(' ')[1][0:]
 			else:
 				name = e.tags[2]['value']
