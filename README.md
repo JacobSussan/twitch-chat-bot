@@ -30,11 +30,16 @@
 - !points: display how many points a user has
 - !uptime: display how long the stream has been live
 - !followage: display how long a user has been following the stream
+- !lastseen: display the last time a user was seen watching the stream
 - let mods change game or title from chat
 - give users a rank
 - check your own or another viewers rank
 - points ranks (!top - show users with the most points)
-- commands that just respond text from database (ex: !ping says: "pong")
+- custom commands (ex: !ping says: "pong")
+	- !addcommand name response
+	- !delcommand name
+	- {name} replace with the name of the user who issued the command
+	- {counter} replace with number of times the command has been used, for example: "streamer has !died 15 times"
 - poll system
 	- !poll option1, option2, etc
 	- !vote option
@@ -47,7 +52,6 @@
 ### On the roadmap
 
 - notices that get put in chat every x minutes.
-- counters (ie: this command has been used x times)
 - songrequests (youtube and spoitify?)
 
 ### To think about

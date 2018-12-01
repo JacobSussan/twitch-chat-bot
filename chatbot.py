@@ -8,9 +8,10 @@ from datetime import timedelta
 from threading import Thread
 import time
 from requests.utils import quote
+from pytz import timezone
 
 class TwitchBot(irc.bot.SingleServerIRCBot):
-	def __init__(self, username, client_id, token, channel_oauth, channel, conn):
+	def __init__(self, username, client_id, token, channel_oauth, channel, conn, timezone):
 		self.client_id = client_id
 		self.token = token
 		self.channel_oauth = channel_oauth
@@ -18,6 +19,7 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 		self.irc_channel = "#" + channel
 		self.conn = conn
 		self.cursor = conn.cursor()
+		self.timezone = timezone
 
 		# Get the channel id, we will need this for v5 API calls
 		url = 'https://api.twitch.tv/kraken/users?login=' + channel
@@ -63,19 +65,31 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 		c = self.connection
 
 		# Check the database for custom commands
-		self.cursor.execute("SELECT command, response FROM commands")
+		self.cursor.execute("SELECT command, response, counter FROM commands")
 		for command in self.cursor.fetchall():
 			if (command[0] == cmd):
-				c.privmsg(self.irc_channel, "@" + e.tags[2]['value'] + ", "+ command[1])
+				# Update counter
+				self.cursor.execute("UPDATE commands SET counter = counter + 1 WHERE command=?", (command[0],))
+				self.conn.commit()
+
+				# Replace {name} with the user who issued the command
+				commandText = command[1].replace("{name}", e.tags[2]['value'])
+				# Replace {counter}
+				commandText = commandText.replace("{counter}", str(command[2] + 1))
+
+				c.privmsg(self.irc_channel, commandText)
 	
 		# Add custom commands
 		if cmd == "addcommand":
 			if len(e.arguments[0].split(' ', 2)) == 3:
 				new_cmd = e.arguments[0].split(' ', 2)[1][0:]
 				response = e.arguments[0].split(' ', 2)[2][0:]
-				self.cursor.execute("INSERT INTO commands VALUES (?, ?)", (new_cmd, response,))
-				self.conn.commit()
-				c.privmsg(self.irc_channel, "Command !" + new_cmd + " was added!")
+				try:
+					self.cursor.execute("INSERT INTO commands VALUES (?, ?, 0)", (new_cmd, response,))
+					self.conn.commit()
+					c.privmsg(self.irc_channel, "Command !" + new_cmd + " was added!")
+				except:
+					c.privmsg(self.irc_channel, "Command !" + new_cmd + " was NOT added, maybe it already exists?")
 		
 		# Delete custom commands
 		elif cmd == "delcommand":
@@ -84,6 +98,15 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 				self.cursor.execute("DELETE FROM commands WHERE command=?", (command_to_remove,))
 				self.conn.commit()
 				c.privmsg(self.irc_channel, "Command !" + command_to_remove + " was removed!")
+
+		# Set counter for a custom command
+		elif cmd == "setcounter":
+			if len(e.arguments[0].split(' ', 2)) == 3:
+				command = e.arguments[0].split(' ', 2)[1][0:]
+				counter = e.arguments[0].split(' ', 2)[2][0:]
+				self.cursor.execute("UPDATE commands SET counter = ? WHERE command=?", (counter, command, ))
+				self.conn.commit()
+				c.privmsg(self.irc_channel, "Command !" + command + " had its counter set to " + counter)
 		
 		# Poll the API to get current game.
 		elif cmd == "game":
@@ -147,8 +170,10 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 				name = e.tags[2]['value']
 
 			self.cursor.execute("SELECT points FROM users WHERE name=?", (name.lower(),))
-			message = name + " has " + str(self.cursor.fetchone()[0]) + " points!"
-			c.privmsg(self.irc_channel, message)
+			points = self.cursor.fetchone()
+			if points is not None:
+				message = name + " has " + str(points[0]) + " points!"
+				c.privmsg(self.irc_channel, message)
 
 		# Display how long the stream has been live before
 		elif cmd == "uptime":
@@ -193,10 +218,14 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 			if len(e.arguments[0].split(' ')) == 1:
 				self.cursor.execute("SELECT rank FROM users WHERE name=?", (e.tags[2]['value'].lower(),))
 				message = e.tags[2]['value'] + " has the rank of " + self.cursor.fetchone()[0]
+				c.privmsg(self.irc_channel, message)
 			# View someone elses rank
 			elif len(e.arguments[0].split(' ')) == 2:
 				self.cursor.execute("SELECT rank FROM users WHERE name = ?", (e.arguments[0].split(' ')[1][0:].lower(), ))
-				message = e.arguments[0].split(' ')[1][0:] + " has the rank of " + self.cursor.fetchone()[0]
+				rank = self.cursor.fetchone()
+				if rank is not None:
+					message = e.arguments[0].split(' ')[1][0:] + " has the rank of " + rank[0]
+					c.privmsg(self.irc_channel, message)
 			# Change someones rank
 			elif len(e.arguments[0].split(' ')) == 3:
 				if self.isMod(e.tags[2]['value'].lower()):
@@ -205,14 +234,16 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 					self.cursor.execute("UPDATE users SET rank = ? WHERE name=?", (rank.lower(), name.lower(),))
 					self.conn.commit()
 					message = name + " has been given the rank " + rank
-			c.privmsg(self.irc_channel, message)
+					c.privmsg(self.irc_channel, message)
 
 		# Show the top 5 users in points
 		elif cmd == "top":
 			self.cursor.execute("SELECT name, points FROM users WHERE rank is not 'blacklisted' AND rank is not 'bot' ORDER BY points DESC LIMIT 5")
 			top_list = self.cursor.fetchall()
-			message = "1: " + top_list[0][0] + ": " + str(top_list[0][1]) + ", 2: " + top_list[1][0] + ": " + str(top_list[1][1]) + ", 3: " + top_list[2][0] + ": " + str(top_list[2][1]) + ", 4: " + top_list[3][0] + ": " + str(top_list[3][1]) + ", 5: " + top_list[4][0] + ": " + str(top_list[4][1])
-			c.privmsg(self.irc_channel, message)
+			if top_list is not None and len(top_list) == 5:
+				message = top_list[0][0] + ": " + str(top_list[0][1]) + ", " + top_list[1][0] + ": " + str(top_list[1][1]) + ", " + \
+					top_list[2][0] + ": " + str(top_list[2][1]) + ", " + top_list[3][0] + 	": " + str(top_list[3][1]) + ", " + top_list[4][0] + ": " + str(top_list[4][1])
+				c.privmsg(self.irc_channel, message)
 
 		# Create a poll - !poll option1, option2, etc
 		elif cmd == "poll":
@@ -266,12 +297,12 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 				option = e.arguments[0].split(' ', 2)[2][0:]
 				bet_amount = e.arguments[0].split(' ', 2)[1][0:]
 				self.cursor.execute("SELECT points FROM users WHERE name=?", (name.lower(),))
-				points = self.cursor.fetchone()[0]
+				points = self.cursor.fetchone()
 
 				# Make sure the user has enough points to make this bet
-				if points >= int(bet_amount):
+				if points is not None and points[0] >= int(bet_amount):
 					self.users_bet.append((name.lower(), bet_amount, option))
-					self.cursor.execute("UPDATE users SET points = ? WHERE name=?", (points - int(bet_amount), name.lower(),))
+					self.cursor.execute("UPDATE users SET points = ? WHERE name=?", (points[0] - int(bet_amount), name.lower(),))
 					self.conn.commit()
 					c.privmsg(self.irc_channel, name + " has bet " + str(bet_amount) + " on option " + option)
 
@@ -289,6 +320,19 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 				self.conn.commit()
 				c.privmsg(self.irc_channel, message)
 				self.users_bet = []
+
+		# Check when a user was last seen watching the stream - !lastseen name
+		elif cmd == "lastseen":
+			if len(e.arguments[0].split(' ', 1)) == 2:
+				self.cursor.execute("SELECT last_seen FROM users WHERE name = ?", (e.arguments[0].split(' ')[1][0:].lower(), ))
+				last_seen_time = self.cursor.fetchone()
+
+				if last_seen_time is not None:
+					message = e.arguments[0].split(' ')[1][0:] + " was last seen at: " + last_seen_time[0]
+				else:
+					message = e.arguments[0].split(' ')[1][0:] + " has never been seen."
+
+				c.privmsg(self.irc_channel, message)
 
 	# Check if the user is a mod
 	def isMod(self, name):
@@ -321,25 +365,26 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 				add_time = 60
 
 			# Process all chatters
+			current_time = datetime.datetime.now(timezone(self.timezone)).strftime('%I:%M:%S%p - %Y-%m-%d')
 			if (r['chatters']):
 				for viewer in r['chatters']['vips']:
-					self.processUser(viewer, 1, add_time)
+					self.processUser(viewer, 1, add_time, current_time)
 				for viewer in r['chatters']['moderators']:
-					self.processUser(viewer, 1, add_time)
+					self.processUser(viewer, 1, add_time, current_time)
 				for viewer in r['chatters']['staff']:
-					self.processUser(viewer, 1, add_time)
+					self.processUser(viewer, 1, add_time, current_time)
 				for viewer in r['chatters']['admins']:
-					self.processUser(viewer, 1, add_time)
+					self.processUser(viewer, 1, add_time, current_time)
 				for viewer in r['chatters']['global_mods']:
-					self.processUser(viewer, 1, add_time)
+					self.processUser(viewer, 1, add_time, current_time)
 				for viewer in r['chatters']['viewers']:
-					self.processUser(viewer, 1, add_time)
+					self.processUser(viewer, 1, add_time, current_time)
 
 			print("Ticking every: " + str(sleep) + " seconds")
 			time.sleep(sleep)
 
 	# Add points and time to database for user
-	def processUser(self, viewer, points, add_time):
+	def processUser(self, viewer, points, add_time, current_time):
 		# If the user isn't in the database, add them with "viewer" role, 0 points, 0 time
 		self.tick_cursor.execute("SELECT * FROM users WHERE name=?", (viewer,))
 		if not self.tick_cursor.fetchone():
@@ -347,13 +392,14 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 				viewer,
 				'viewer',
 				0,
-				0
+				0,
+				current_time
 			)]
-			self.tick_cursor.executemany("INSERT INTO users VALUES (?, ?, ?, ?)", user_data)
+			self.tick_cursor.executemany("INSERT INTO users VALUES (?, ?, ?, ?, ?)", user_data)
 			self.tick_conn.commit()
 
 		# Update the values in the database
-		self.tick_cursor.execute("UPDATE users SET time = Time + ?, points = points + ? WHERE name=?", (add_time, points, viewer,))
+		self.tick_cursor.execute("UPDATE users SET time = Time + ?, points = points + ?, last_seen = ? WHERE name=?", (add_time, points, current_time, viewer, ))
 		self.tick_conn.commit()
 
 
@@ -379,8 +425,9 @@ def main():
 	token = config.SETTINGS['oauth']
 	channel_oauth = config.SETTINGS['channel_oauth']
 	channel = config.SETTINGS['channel_name'].lower()
+	timezone = config.SETTINGS['timezone']
 
-	bot = TwitchBot(username, client_id, token, channel_oauth, channel, conn)
+	bot = TwitchBot(username, client_id, token, channel_oauth, channel, conn, timezone)
 	bot.start()
 
 if __name__ == "__main__":

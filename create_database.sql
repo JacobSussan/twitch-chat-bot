@@ -1,3 +1,3 @@
 CREATE TABLE IF NOT EXISTS `log` ( `name` TEXT, `message` TEXT, `time` INTEGER );
-CREATE TABLE IF NOT EXISTS `users` ( `name` TEXT, `rank` TEXT, `points` INTEGER, `time` INTEGER );
-CREATE TABLE IF NOT EXISTS "commands" ( `command` TEXT NOT NULL UNIQUE, `response` TEXT NOT NULL );
+CREATE TABLE IF NOT EXISTS `users` ( `name` TEXT NOT NULL UNIQUE, `rank` TEXT NOT NULL, `points` INTEGER NOT NULL DEFAULT 0, `time` INTEGER NOT NULL DEFAULT 0, `last_seen` TEXT NOT NULL, PRIMARY KEY(`name`) )
+CREATE TABLE IF NOT EXISTS "commands" ( `command` TEXT NOT NULL UNIQUE, `response` TEXT NOT NULL, `counter` INTEGER DEFAULT 0 )
