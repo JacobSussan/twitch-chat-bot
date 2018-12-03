@@ -361,8 +361,7 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 		self.tick_conn = sqlite3.connect('data.db')
 		self.tick_cursor = self.tick_conn.cursor()
 
-		start_time = int(time.time())
-
+		# Get and create a list of notices, the 3rd element is time_until_post
 		self.tick_cursor.execute("SELECT * FROM notices")
 		notices = self.tick_cursor.fetchall()
 
@@ -390,12 +389,12 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 
 			# Process notices
 			for notice in notice_list:
-				# Print notice
+				# Print notice if time_until_post (notice[3]) has less than 0 time remaining, and add total time back to it
 				if notice[3] <= 0:
 					c.privmsg(self.irc_channel, notice[2])
 					print("Posted notice: " + notice[2])
-					notice[3] = notice[0]
-				# Remove time from notice
+					notice[3] += notice[0]
+				# If time_until_post still has time left, remove the amount of time we are sleeping for
 				else:
 					notice[3] -= sleep / 60
 
