@@ -40,10 +40,10 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 		c.cap('REQ', ':twitch.tv/membership')
 		c.cap('REQ', ':twitch.tv/tags')
 		c.cap('REQ', ':twitch.tv/commands')
-		c.join('#' + self.channel)
+		c.join(self.irc_channel)
 
 		# call tick() from another thread so it can run at the same time
-		thread = Thread(target=self.tick)
+		thread = Thread(target=self.tick, args=(c,))
 		thread.start()
 
 	def on_pubmsg(self, c, e):
@@ -242,7 +242,7 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 			top_list = self.cursor.fetchall()
 			if top_list is not None and len(top_list) == 5:
 				message = top_list[0][0] + ": " + str(top_list[0][1]) + ", " + top_list[1][0] + ": " + str(top_list[1][1]) + ", " + \
-					top_list[2][0] + ": " + str(top_list[2][1]) + ", " + top_list[3][0] + 	": " + str(top_list[3][1]) + ", " + top_list[4][0] + ": " + str(top_list[4][1])
+					top_list[2][0] + ": " + str(top_list[2][1]) + ", " + top_list[3][0] + ": " + str(top_list[3][1]) + ", " + top_list[4][0] + ": " + str(top_list[4][1])
 				c.privmsg(self.irc_channel, message)
 
 		# Create a poll - !poll option1, option2, etc
@@ -334,19 +334,43 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 
 				c.privmsg(self.irc_channel, message)
 
+		# Add a notice - !addnotice frequency offset notice_text
+		elif cmd == "addnotice":
+			if len(e.arguments[0].split(' ', 3)) == 4:
+				self.cursor.execute("INSERT INTO notices VALUES (?, ?, ?)", (e.arguments[0].split(' ', 3)[1], e.arguments[0].split(' ', 3)[2], e.arguments[0].split(' ', 3)[3],))
+				self.conn.commit()
+				c.privmsg(self.irc_channel, "Notice '" + e.arguments[0].split(' ', 3)[3] + "' was added and will display every " + e.arguments[0].split(' ', 3)[1] + " minutes with an offset of " + e.arguments[0].split(' ', 3)[2])
+
+		# Delete a notice - !delnotice notice_text
+		elif cmd == "delnotice":
+			if len(e.arguments[0].split(' ', 1)) == 2:
+				notice_to_remove = e.arguments[0].split(' ', 1)[1][0:]
+				self.cursor.execute("DELETE FROM notices WHERE notice=?", (notice_to_remove,))
+				self.conn.commit()
+				c.privmsg(self.irc_channel, "Notice '" + notice_to_remove + "' was removed!")
+
 	# Check if the user is a mod
 	def isMod(self, name):
 		self.cursor.execute("SELECT rank FROM users WHERE name=?", (name.lower(),))
 		user = self.cursor.fetchone()
-		return user and user[0] == "mod"
+		return user and user[0] == "mod" or name.lower() == self.channel
 
 	# Handles adding points and time-watched to the database for users in the chat
-	def tick(self):
+	def tick(self, c):
 		# We need a new connection and cursor since they can only be used on the thread they were created on
 		self.tick_conn = sqlite3.connect('data.db')
 		self.tick_cursor = self.tick_conn.cursor()
 
-		# Main points/time loop
+		start_time = int(time.time())
+
+		self.tick_cursor.execute("SELECT * FROM notices")
+		notices = self.tick_cursor.fetchall()
+
+		notice_list = []
+		for notice in notices:
+			notice_list.append([notice[0], notice[1], notice[2], notice[1]])
+
+		# Main points/time/notices loop
 		while True:
 			# Get a list of "chatters" from twitch
 			url = 'http://tmi.twitch.tv/group/user/' + self.channel + '/chatters'
@@ -363,6 +387,17 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 			else:
 				sleep = 60
 				add_time = 60
+
+			# Process notices
+			for notice in notice_list:
+				# Print notice
+				if notice[3] <= 0:
+					c.privmsg(self.irc_channel, notice[2])
+					print("Posted notice: " + notice[2])
+					notice[3] = notice[0]
+				# Remove time from notice
+				else:
+					notice[3] -= sleep / 60
 
 			# Process all chatters
 			current_time = datetime.datetime.now(timezone(self.timezone)).strftime('%I:%M:%S%p - %Y-%m-%d')
@@ -401,7 +436,6 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 		# Update the values in the database
 		self.tick_cursor.execute("UPDATE users SET time = Time + ?, points = points + ?, last_seen = ? WHERE name=?", (add_time, points, current_time, viewer, ))
 		self.tick_conn.commit()
-
 
 # Return the amount of time since date in a deltatime
 def time_since(datetimeFormat, date):
