@@ -52,9 +52,12 @@
 - notices - frequency and offset in minutes, offsets are to stop all notices from posting at the same time. Checked every minute when the stream is online, every 10 minutes when the stream is offline
 	- !addnotice frequency offset notice_text - !addnotice 60 10 follow my twitter!  --  will post "follow my twitter" in chat every 60 minutes, starting 10 minutes after the bot starts.
 	- !delnotice notice_text - delete the notice that matches "notice_text"
-
+- duels
+	- !duel name ammount
+	- !duel accept
+	- !duel deny
+	- !duel cancel
 
 ### On the roadmap
 
 - songrequests (youtube and spoitify?)
-- duels

@@ -9,6 +9,7 @@ from threading import Thread
 import time
 from requests.utils import quote
 from pytz import timezone
+import random
 
 class TwitchBot(irc.bot.SingleServerIRCBot):
 	def __init__(self, username, client_id, token, channel_oauth, channel, conn, timezone):
@@ -20,6 +21,7 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 		self.conn = conn
 		self.cursor = conn.cursor()
 		self.timezone = timezone
+		self.duels = []
 
 		# Get the channel id, we will need this for v5 API calls
 		url = 'https://api.twitch.tv/kraken/users?login=' + channel
@@ -348,6 +350,63 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 				self.cursor.execute("DELETE FROM notices WHERE notice=?", (notice_to_remove,))
 				self.conn.commit()
 				c.privmsg(self.irc_channel, "Notice '" + notice_to_remove + "' was removed!")
+
+		# Duel another user - !duel user points
+		elif cmd == "duel":
+			# If there are 2 args, user is accpeting/denying a duel
+			if len(e.arguments[0].split(' ')) == 2:
+				# The user accpets the duel, pick a winner and adjust points
+				if e.arguments[0].split(' ', 1)[1][0:] == "accept":
+					for duel in self.duels:
+						# We found a duel this user is in...
+						if duel[0] == e.tags[2]['value'] or duel[1] == e.tags[2]['value']:
+							user1 = duel[0]
+							user2 = duel[1]
+							# Make sure both users have enough points
+							self.cursor.execute("SELECT points FROM users WHERE name = ?", (user1.lower(), ))
+							r1 = self.cursor.fetchone()
+							self.cursor.execute("SELECT points FROM users WHERE name = ?", (user2.lower(), ))
+							r2 = self.cursor.fetchone()
+							if r1 and r1[0] > int(duel[2]) and r2 and r2[0] > int(duel[2]):
+								# Pick winner and loser
+								winner = random.choice([user1, user2])
+								if user1 == winner:
+									loser = user2
+								else:
+									loser = user1
+
+								# Adjust points
+								self.cursor.execute("UPDATE users SET points = points + ? WHERE name=?", (int(duel[2]), winner.lower(),))
+								self.cursor.execute("UPDATE users SET points = points - ? WHERE name=?", (int(duel[2]), loser.lower(),))
+								self.conn.commit()
+								# Remove duel from duels list
+								self.duels[:] = []
+								c.privmsg(self.irc_channel, winner + " won " + duel[2] + " points FeelsGoodMan")
+								c.privmsg(self.irc_channel, loser + " lost " + duel[2] + " points FeelsBadMan")
+				# The user denies the duel, remove it from the duels list
+				elif e.arguments[0].split(' ', 1)[1][0:] == "deny" or e.arguments[0].split(' ', 1)[1][0:] == "cancel":
+					for duel in self.duels:
+						# We fount a duel this user is in...
+						if duel[0] == e.tags[2]['value'] or duel[1] == e.tags[2]['value']:
+							# Remove duel from duels list
+							self.duels[:] = []
+
+			# If there are 3 args, user is requesting a duel
+			elif len(e.arguments[0].split(' ')) == 3:
+				user1 = e.tags[2]['value']
+				user2 = e.arguments[0].split(' ', 2)[1][0:]
+				amount = e.arguments[0].split(' ', 2)[2][0:]
+				inDuel = False
+				for duel in self.duels:
+					if user1 == duel[0] or user1 == duel[1] or user2 == duel[0] or user2 == duel[1]:
+						inDuel = True
+
+				if not inDuel:
+					self.duels.append([user1, user2, amount])
+					c.privmsg(self.irc_channel, user1 + " has requested a duel with " + user2 + " for " + amount + " points! User !duel accept or !duel deny")
+				else:
+					c.privmsg(self.irc_channel, "Either you or the other user is already in a duel! Type !duel deny to cancel and try again.")
+
 
 	# Check if the user is a mod
 	def isMod(self, name):
