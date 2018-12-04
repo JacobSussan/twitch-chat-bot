@@ -359,7 +359,7 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 				if e.arguments[0].split(' ', 1)[1][0:] == "accept":
 					for duel in self.duels:
 						# We found a duel this user is in...
-						if duel[0] == e.tags[2]['value'] or duel[1] == e.tags[2]['value']:
+						if duel[0] == e.tags[2]['value'].lower() or duel[1] == e.tags[2]['value'].lower():
 							user1 = duel[0]
 							user2 = duel[1]
 							# Make sure both users have enough points
@@ -367,7 +367,7 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 							r1 = self.cursor.fetchone()
 							self.cursor.execute("SELECT points FROM users WHERE name = ?", (user2.lower(), ))
 							r2 = self.cursor.fetchone()
-							if r1 and r1[0] > int(duel[2]) and r2 and r2[0] > int(duel[2]):
+							if r1 and r1[0] >= int(duel[2]) and r2 and r2[0] >= int(duel[2]):
 								# Pick winner and loser
 								winner = random.choice([user1, user2])
 								if user1 == winner:
@@ -383,13 +383,18 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 								self.duels[:] = []
 								c.privmsg(self.irc_channel, winner + " won " + duel[2] + " points FeelsGoodMan")
 								c.privmsg(self.irc_channel, loser + " lost " + duel[2] + " points FeelsBadMan")
-				# The user denies the duel, remove it from the duels list
+							else:
+								c.privmsg(self.irc_channel, "One of the users in the duel does not have enough points to play :(")
+								self.duels[:] = []
+
+				# The user denies or cancels the duel, remove it from the duels list
 				elif e.arguments[0].split(' ', 1)[1][0:] == "deny" or e.arguments[0].split(' ', 1)[1][0:] == "cancel":
 					for duel in self.duels:
 						# We fount a duel this user is in...
-						if duel[0] == e.tags[2]['value'] or duel[1] == e.tags[2]['value']:
+						if duel[0] == e.tags[2]['value'].lower() or duel[1] == e.tags[2]['value'].lower():
 							# Remove duel from duels list
 							self.duels[:] = []
+							c.privmsg(self.irc_channel, "The duel between " + duel[0] + " and " + duel[1] + " has been aborted.")
 
 			# If there are 3 args, user is requesting a duel
 			elif len(e.arguments[0].split(' ')) == 3:
@@ -402,8 +407,8 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 						inDuel = True
 
 				if not inDuel:
-					self.duels.append([user1, user2, amount])
-					c.privmsg(self.irc_channel, user1 + " has requested a duel with " + user2 + " for " + amount + " points! User !duel accept or !duel deny")
+					self.duels.append([user1.lower(), user2.lower(), amount])
+					c.privmsg(self.irc_channel, "@" + user1 + " has requested a duel with @" + user2 + " for " + amount + " points! Use !duel accept or !duel deny")
 				else:
 					c.privmsg(self.irc_channel, "Either you or the other user is already in a duel! Type !duel deny to cancel and try again.")
 
