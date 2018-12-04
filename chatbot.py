@@ -261,7 +261,7 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 		# Vote on an option from the poll
 		elif cmd == "vote":
 			name = e.tags[2]['value']
-			if hasattr(self, 'poll') and len(e.arguments[0].split(' ', 2)) == 2 and not name.lower() in self.poll_voted and e.arguments[0].split(' ', 1)[1][0:] in self.poll[0].split(', '):
+			if hasattr(self, 'poll') and len(e.arguments[0].split(' ', 1)) == 2 and not name.lower() in self.poll_voted and e.arguments[0].split(' ', 1)[1][0:] in self.poll[0].split(', '):
 				options = self.poll[0].split(', ')
 				self.poll_voted.append(name.lower())
 				self.results[options.index(e.arguments[0].split(' ', 1)[1][0:])] += 1
