@@ -10,6 +10,9 @@ import time
 from requests.utils import quote
 from pytz import timezone
 import random
+if config.SETTINGS['enable_media_requests']:
+	import pafy
+	import vlc
 
 class TwitchBot(irc.bot.SingleServerIRCBot):
 	def __init__(self, username, client_id, token, channel_oauth, channel, conn, timezone):
@@ -47,6 +50,10 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 		# call tick() from another thread so it can run at the same time
 		thread = Thread(target=self.tick, args=(c,))
 		thread.start()
+		
+		if config.SETTINGS['enable_media_requests']:
+			thread = Thread(target=self.processMediaRequests, args=(c,))
+			thread.start()
 
 	def on_pubmsg(self, c, e):
 		# Convert the json from twitch into a dict
@@ -412,12 +419,151 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 				else:
 					c.privmsg(self.irc_channel, "Either you or the other user is already in a duel! Type !duel deny to cancel and try again.")
 
+		# Request a song to be played on the stream - !sr youtube_url
+		elif cmd == "songrequest" or cmd == "sr":
+			if config.SETTINGS['enable_media_requests']:
+				try:
+					url = e.arguments[0].split(' ', 2)[1][0:]
+					video = pafy.new(url)
+					# Verify the video is not too long or has too few views
+					if video.length > config.SETTINGS['media_requests_max_length']:
+						c.privmsg(self.irc_channel, "The video you requested is too long.")
+					elif video.viewcount < config.SETTINGS['media_requests_min_views']:
+						c.privmsg(self.irc_channel, "The video you requested does not have enough views.")
+					else:
+						self.playlist.append(url)
+						c.privmsg(self.irc_channel, "[" + video.title + "] has been added to the playlist.")
+				except:
+					c.privmsg(self.irc_channel, "Error parsing video. Valid formats are the video ID or full URL.")
+			else:
+				c.privmsg(self.irc_channel, "Media requests are disabled.")
+
+		# Add a defualt song to the playlist - !default youtube_url
+		elif cmd == "default":
+			if config.SETTINGS['enable_media_requests']:
+				try:
+					url = e.arguments[0].split(' ', 2)[1][0:]
+					video = pafy.new(url)
+					self.cursor.execute("INSERT INTO songs VALUES (?)", (url,))
+					self.conn.commit()
+					c.privmsg(self.irc_channel, "[" + video.title + "] has been added to the default playlist.")
+				except:
+					c.privmsg(self.irc_channel, "Error parsing video. Valid formats are the video ID or full URL.")
+			else:
+				c.privmsg(self.irc_channel, "Media requests are disabled.")
+
+		# Display the prev, current, nad next songs
+		elif cmd == "playlist" or cmd == "pl":
+			if config.SETTINGS['enable_media_requests']:
+				message = ""
+				if self.last_song is not "":
+					message += "Last Song: " + self.last_song
+				
+				if len(self.playlist) > 0:
+					message += " Current Song: " + self.playlist[0]
+
+				if len(self.playlist) > 1:
+					message += " Next Song: " + self.playlist[1]
+			else:
+				message = "Media requests are disabled."
+
+			c.privmsg(self.irc_channel, message)
+
+		# Skip current song
+		elif cmd == "skip":
+			if config.SETTINGS['enable_media_requests']:
+				if len(self.playlist) > 0 and self.isMod(e.tags[2]['value']):
+					self.last_song = self.playlist[0]
+					del self.playlist[0]
+					self.player.pause()
+					self.isPlaying = False
+			else:
+				c.privmsg(self.irc_channel, "Media requests are disabled.")
+
+		elif cmd == "pause":
+			if config.SETTINGS['enable_media_requests']:
+				self.player.pause()
+			else:
+				c.privmsg(self.irc_channel, "Media requests are disabled.")
+
+		elif cmd == "resume" or cmd == "play":
+			if config.SETTINGS['enable_media_requests']:
+				self.player.play()
+			else:
+				c.privmsg(self.irc_channel, "Media requests are disabled.")
+
+		# Adjust volume (0-100)
+		elif cmd == "volume":
+			if config.SETTINGS['enable_media_requests']:
+				if len(e.arguments[0].split(' ', 1)) == 2:
+					volume = e.arguments[0].split(' ', 2)[1][0:]
+					if volume.isdigit() and int(volume) <= 100 and int(volume) >= 0 and self.isMod(e.tags[2]['value']):
+						self.player.audio_set_volume(int(volume))
+						c.privmsg(self.irc_channel, "Volume has been set to " + volume)
+			else:
+				c.privmsg(self.irc_channel, "Media requests are disabled.")
+
+	def songFinished(self, data):
+		self.last_song = self.current_song
+		del self.playlist[0]
+		self.isPlaying = False
+
+	def playSong(self, url, c):
+		if not self.isPlaying:
+			self.isPlaying = True
+			self.current_song = url
+			print("Now playing " + url)
+			video = pafy.new(url)
+			c.privmsg(self.irc_channel, "Now playing: [" + video.title + "] " + url)
+			best = video.getbest()
+			playurl = best.url
+
+			Media = self.Instance.media_new(playurl)
+			Media.get_mrl()
+			self.player.set_media(Media)
+			self.player.play()
 
 	# Check if the user is a mod
 	def isMod(self, name):
 		self.cursor.execute("SELECT rank FROM users WHERE name=?", (name.lower(),))
 		user = self.cursor.fetchone()
 		return user and user[0] == "mod" or name.lower() == self.channel
+
+	def processMediaRequests(self, c):
+		# Init VLC for song requests, play a video to open the media player.
+		url = 'https://www.youtube.com/watch?v=8-16MlvIMWw'
+		video = pafy.new(url)
+		best = video.getbest()
+		playurl = best.url
+		self.playlist = [url]
+		self.last_song = ""
+
+		self.Instance = vlc.Instance()
+		self.player = self.Instance.media_player_new()
+		self.current_song = ""
+		self.player.event_manager().event_attach(vlc.EventType.MediaPlayerEndReached, self.songFinished)
+
+		Media = self.Instance.media_new(playurl)
+		Media.get_mrl()
+		self.player.set_media(Media)
+		self.isPlaying = True
+		self.player.play()
+
+		self.media_conn = sqlite3.connect('data.db')
+		self.media_cursor = self.media_conn.cursor()
+
+		while True:
+			# Play requested song
+			if len(self.playlist) > 0 and not self.isPlaying:
+				self.playSong(self.playlist[0], c)
+			# Play a song from the defualt list if there are any
+			elif len(self.playlist) == 0 and not self.isPlaying:
+				self.media_cursor.execute("SELECT url FROM songs ORDER BY RANDOM() LIMIT 1")
+				url = self.media_cursor.fetchone()
+				if url and url[0]:
+					self.playlist.append(url[0])
+					self.playSong(url[0], c)
+			time.sleep(1)
 
 	# Handles adding points and time-watched to the database for users in the chat
 	def tick(self, c):
@@ -453,14 +599,12 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 
 			# Process notices
 			for notice in notice_list:
-				# Print notice if time_until_post (notice[3]) has less than 0 time remaining, and add total time back to it
+				notice[3] -= sleep / 60
+				# Post notice if needed and reset the time until it's posted again
 				if notice[3] <= 0:
 					c.privmsg(self.irc_channel, notice[2])
 					print("Posted notice: " + notice[2])
 					notice[3] += notice[0]
-				# If time_until_post still has time left, remove the amount of time we are sleeping for
-				else:
-					notice[3] -= sleep / 60
 
 			# Process all chatters
 			current_time = datetime.datetime.now(timezone(self.timezone)).strftime('%I:%M:%S%p - %Y-%m-%d')
