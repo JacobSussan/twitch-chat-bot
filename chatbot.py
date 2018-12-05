@@ -441,14 +441,15 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 		# Add a defualt song to the playlist - !default youtube_url
 		elif cmd == "default":
 			if config.SETTINGS['enable_media_requests']:
-				try:
-					url = e.arguments[0].split(' ', 2)[1][0:]
-					video = pafy.new(url)
-					self.cursor.execute("INSERT INTO songs VALUES (?)", (url,))
-					self.conn.commit()
-					c.privmsg(self.irc_channel, "[" + video.title + "] has been added to the default playlist.")
-				except:
-					c.privmsg(self.irc_channel, "Error parsing video. Valid formats are the video ID or full URL.")
+				if self.isMod(e.tags[2]['value']):
+					try:
+						url = e.arguments[0].split(' ', 2)[1][0:]
+						video = pafy.new(url)
+						self.cursor.execute("INSERT INTO songs VALUES (?)", (url,))
+						self.conn.commit()
+						c.privmsg(self.irc_channel, "[" + video.title + "] has been added to the default playlist.")
+					except:
+						c.privmsg(self.irc_channel, "Error parsing video. Valid formats are the video ID or full URL.")
 			else:
 				c.privmsg(self.irc_channel, "Media requests are disabled.")
 
@@ -472,7 +473,7 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 		# Skip current song
 		elif cmd == "skip":
 			if config.SETTINGS['enable_media_requests']:
-				if len(self.playlist) > 0 and self.isMod(e.tags[2]['value']):
+				if len(self.playlist) > 0 and self.isMod(e.tags[2]['value']) and self.isMod(e.tags[2]['value'])::
 					self.last_song = self.playlist[0]
 					del self.playlist[0]
 					self.player.pause()
@@ -481,21 +482,23 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 				c.privmsg(self.irc_channel, "Media requests are disabled.")
 
 		elif cmd == "pause":
-			if config.SETTINGS['enable_media_requests']:
-				self.player.pause()
-			else:
-				c.privmsg(self.irc_channel, "Media requests are disabled.")
+			if self.isMod(e.tags[2]['value']):
+				if config.SETTINGS['enable_media_requests']:
+					self.player.pause()
+				else:
+					c.privmsg(self.irc_channel, "Media requests are disabled.")
 
 		elif cmd == "resume" or cmd == "play":
-			if config.SETTINGS['enable_media_requests']:
-				self.player.play()
-			else:
-				c.privmsg(self.irc_channel, "Media requests are disabled.")
+			if self.isMod(e.tags[2]['value']):
+				if config.SETTINGS['enable_media_requests']:
+					self.player.play()
+				else:
+					c.privmsg(self.irc_channel, "Media requests are disabled.")
 
 		# Adjust volume (0-100)
 		elif cmd == "volume":
 			if config.SETTINGS['enable_media_requests']:
-				if len(e.arguments[0].split(' ', 1)) == 2:
+				if len(e.arguments[0].split(' ', 1)) == 2 and self.isMod(e.tags[2]['value'])::
 					volume = e.arguments[0].split(' ', 2)[1][0:]
 					if volume.isdigit() and int(volume) <= 100 and int(volume) >= 0 and self.isMod(e.tags[2]['value']):
 						self.player.audio_set_volume(int(volume))
