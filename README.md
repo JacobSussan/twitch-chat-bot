@@ -10,11 +10,10 @@
 	
 	2.2) client_id: your applications client id - https://glass.twitch.tv/console/apps
 	
-	2.3) oauth: token without "oath:"
+	2.3) oauth: token without "oath:"  --- Get it from: https://twitchapps.com/tmi ON THE BOT ACCOUNT
 	
-	Get it from: https://twitchapps.com/tmi ON THE BOT ACCOUNT
+	2.4) channel_oauth: token without "oath:" --- Enable "channel_editor" from: https://twitchtokengenerator.com/ and click "generate token" ON THE CHANNEL ACCOUNT
 	
-	2.4) channel_oauth: token without "oath:" Enable "channel_editor" from: https://twitchtokengenerator.com/ and click "generate token" ON THE CHANNEL ACCOUNT
 	2.5) channel_name: the username of the chat the bot should connect to
 	
 	2.6) timezone
