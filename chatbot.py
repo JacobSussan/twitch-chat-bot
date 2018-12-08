@@ -473,7 +473,7 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 		# Skip current song
 		elif cmd == "skip":
 			if config.SETTINGS['enable_media_requests']:
-				if len(self.playlist) > 0 and self.isMod(e.tags[2]['value']) and self.isMod(e.tags[2]['value'])::
+				if len(self.playlist) > 0 and self.isMod(e.tags[2]['value']) and self.isMod(e.tags[2]['value']):
 					self.last_song = self.playlist[0]
 					del self.playlist[0]
 					self.player.pause()
@@ -498,7 +498,7 @@ class TwitchBot(irc.bot.SingleServerIRCBot):
 		# Adjust volume (0-100)
 		elif cmd == "volume":
 			if config.SETTINGS['enable_media_requests']:
-				if len(e.arguments[0].split(' ', 1)) == 2 and self.isMod(e.tags[2]['value'])::
+				if len(e.arguments[0].split(' ', 1)) == 2 and self.isMod(e.tags[2]['value']):
 					volume = e.arguments[0].split(' ', 2)[1][0:]
 					if volume.isdigit() and int(volume) <= 100 and int(volume) >= 0 and self.isMod(e.tags[2]['value']):
 						self.player.audio_set_volume(int(volume))
