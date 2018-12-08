@@ -6,6 +6,7 @@
 	- pafy & python-vlc if you want to enable media requests
 1) Create the databases
 2) Edit config.py
+
 	2.1) bot_name: the username of the bot account
 	
 	2.2) client_id: your applications client id - https://glass.twitch.tv/console/apps
